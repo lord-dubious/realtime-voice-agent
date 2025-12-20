@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # LiveKit Server for WebRTC
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --dev
+    ports:
+      - "7880:7880"  # HTTP/WebSocket
+      - "7881:7881"  # RTC over TCP
+      - "7882:7882"  # RTC over UDP
+    environment:
+      - "LIVEKIT_KEYS=devkey: secret"
+    volumes:
+      - livekit-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7880"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - voice-network
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - voice-network
+
+  # Voice Agent Service
+  voice-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - LIVEKIT_URL=ws://livekit:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+      - REDIS_URL=redis://redis:6379
+      - TTS_VOICE=${TTS_VOICE:-en-US-AriaNeural}
+      - VAD_THRESHOLD=${VAD_THRESHOLD:-0.5}
+    depends_on:
+      livekit:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+    networks:
+      - voice-network
+    stdin_open: true
+    tty: true
+
+  # Test runner service
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - GEMINI_API_KEY=test-key
+      - LIVEKIT_URL=ws://localhost:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+    command: pytest tests/ -v --tb=short
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+    networks:
+      - voice-network
+    profiles:
+      - test
+
+volumes:
+  livekit-data:
+  redis-data:
+
+networks:
+  voice-network:
+    driver: bridge
