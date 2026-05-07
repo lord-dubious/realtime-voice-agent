@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 import numpy as np
+import pytest
 
 from voice_agent.models import (
     AgentMetrics,
-    AgentState,
     AudioChunk,
     ConversationTurn,
     LLMResponse,
