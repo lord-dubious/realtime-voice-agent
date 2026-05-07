@@ -1,14 +1,23 @@
-"""Real-Time Voice Agent - WebRTC voice interactions with Gemini AI.
+"""Real-Time Voice Agent - WebRTC voice interaction demo with Gemini AI.
 
-A production-ready voice agent using:
+A developer-focused voice agent using:
 - LiveKit for WebRTC transport
 - Silero VAD for voice activity detection
-- Gemini for AI reasoning
+- Gemini for AI reasoning, with explicit dependency/config failures
 - Edge TTS for speech synthesis
+
+Transcription is currently a demo placeholder; integrate a real STT backend
+before using this package with real users.
 """
 
 from voice_agent.agent import VoiceAgent, create_agent
-from voice_agent.llm import GeminiLLM, create_llm
+from voice_agent.llm import (
+    GeminiConfigurationError,
+    GeminiDependencyError,
+    GeminiGenerationError,
+    GeminiLLM,
+    create_llm,
+)
 from voice_agent.models import (
     AgentMetrics,
     AgentState,
@@ -33,6 +42,9 @@ __all__ = [
     "VoiceAgent",
     "VoiceActivityDetector",
     "GeminiLLM",
+    "GeminiConfigurationError",
+    "GeminiDependencyError",
+    "GeminiGenerationError",
     "TextToSpeech",
     # Factory functions
     "create_agent",
