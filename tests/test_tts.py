@@ -62,14 +62,20 @@ class TestTextToSpeech:
             assert result == b"\x00\x01"
 
     @pytest.mark.asyncio
-    async def test_synthesize_error_handling(self):
-        """Test synthesis error handling."""
+    async def test_synthesize_error_handling(self, caplog, capsys):
+        """Test synthesis error handling logs instead of printing."""
         tts = TextToSpeech()
 
-        with patch("edge_tts.Communicate", side_effect=Exception("TTS error")):
+        with (
+            patch("edge_tts.Communicate", side_effect=Exception("TTS error")),
+            caplog.at_level("ERROR", logger="voice_agent.tts"),
+        ):
             result = await tts.synthesize("Test")
 
-            assert result == b""
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "TTS synthesis error" in caplog.text
+        assert result == b""
 
     @pytest.mark.asyncio
     async def test_synthesize_stream(self):
@@ -92,17 +98,23 @@ class TestTextToSpeech:
             assert chunks == [b"chunk1", b"chunk2"]
 
     @pytest.mark.asyncio
-    async def test_synthesize_stream_error(self):
-        """Test streaming synthesis error handling."""
+    async def test_synthesize_stream_error(self, caplog, capsys):
+        """Test streaming synthesis error handling logs instead of printing."""
         tts = TextToSpeech()
 
-        with patch("edge_tts.Communicate", side_effect=Exception("Stream error")):
+        with (
+            patch("edge_tts.Communicate", side_effect=Exception("Stream error")),
+            caplog.at_level("ERROR", logger="voice_agent.tts"),
+        ):
             chunks = []
             async for chunk in tts.synthesize_stream("Test"):
                 chunks.append(chunk)
 
-            # Should yield nothing on error
-            assert chunks == []
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "TTS streaming error" in caplog.text
+        # Should yield nothing on error
+        assert chunks == []
 
     @pytest.mark.asyncio
     async def test_list_voices_success(self):
@@ -122,12 +134,18 @@ class TestTextToSpeech:
             assert all(v["Locale"].startswith("en") for v in voices)
 
     @pytest.mark.asyncio
-    async def test_list_voices_error(self):
-        """Test listing voices error handling."""
-        with patch("edge_tts.list_voices", side_effect=Exception("API error")):
+    async def test_list_voices_error(self, caplog, capsys):
+        """Test listing voices error handling logs instead of printing."""
+        with (
+            patch("edge_tts.list_voices", side_effect=Exception("API error")),
+            caplog.at_level("ERROR", logger="voice_agent.tts"),
+        ):
             voices = await TextToSpeech.list_voices("en")
 
-            assert voices == []
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "Failed to list voices" in caplog.text
+        assert voices == []
 
 
 class TestCreateTts:

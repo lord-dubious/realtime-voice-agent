@@ -6,15 +6,13 @@ VAD, STT, LLM, and TTS components for real-time voice interactions.
 
 from __future__ import annotations
 
-import asyncio
-import os
+import logging
 import time
-from datetime import datetime
-from typing import Any, Callable
+from collections.abc import Callable
 
 from dotenv import load_dotenv
 
-from voice_agent.llm import GeminiLLM, create_llm
+from voice_agent.llm import create_llm
 from voice_agent.models import (
     AgentMetrics,
     AgentState,
@@ -23,10 +21,12 @@ from voice_agent.models import (
     TranscriptionResult,
     VoiceAgentConfig,
 )
-from voice_agent.tts import TextToSpeech, create_tts
-from voice_agent.vad import VoiceActivityDetector, create_vad
+from voice_agent.tts import create_tts
+from voice_agent.vad import create_vad
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class VoiceAgent:
@@ -65,7 +65,7 @@ class VoiceAgent:
         self._audio_buffer: list[AudioChunk] = []
         self._is_processing = False
 
-    def register_tool(self, name: str, func: Callable, description: str = "") -> None:
+    def register_tool(self, name: str, func: Callable[..., object], description: str = "") -> None:
         """Register a tool for the LLM to use.
 
         Args:
@@ -157,7 +157,7 @@ class VoiceAgent:
             # Combine audio chunks
             audio_data = b"".join(chunk.data for chunk in self._audio_buffer)
 
-            # Transcribe (using mock for now - integrate Whisper in production)
+            # Transcribe using the demo placeholder implementation.
             start_time = time.time()
             transcription = await self._transcribe(audio_data)
             transcription_time = (time.time() - start_time) * 1000
@@ -191,7 +191,7 @@ class VoiceAgent:
 
                     # Execute any tool calls
                     for tool_call in response.tool_calls:
-                        result = await self.llm.execute_tool(tool_call)
+                        await self.llm.execute_tool(tool_call)
                         # Could inject result back into response
 
                     # Synthesize speech
@@ -210,7 +210,7 @@ class VoiceAgent:
                     self._update_avg_metric("avg_tts_time", tts_time)
 
         except Exception as e:
-            print(f"Speech processing error: {e}")
+            logger.exception("Speech processing error: %s", e)
             self.metrics.error_count += 1
             self._set_state(AgentState.ERROR)
 
@@ -222,8 +222,9 @@ class VoiceAgent:
     async def _transcribe(self, audio_data: bytes) -> TranscriptionResult:
         """Transcribe audio to text.
 
-        This is a placeholder - integrate Faster-Whisper or
-        Gemini's audio API in production.
+        This is a demo placeholder, not a production STT implementation.
+        Integrate Faster-Whisper, Gemini audio, or a speech-to-text service
+        before using transcription with real users.
 
         Args:
             audio_data: Raw audio bytes.
@@ -231,15 +232,8 @@ class VoiceAgent:
         Returns:
             Transcription result.
         """
-        # Mock transcription for demonstration
-        # In production, use faster-whisper or Gemini audio API
+        # Deterministic demo transcription for examples and tests.
         duration = len(audio_data) / (2 * self.config.vad.sample_rate)
-
-        # For now, return a placeholder
-        # Real implementation would use:
-        # - faster-whisper for local transcription
-        # - Gemini's audio capabilities
-        # - Google Cloud Speech-to-Text
 
         return TranscriptionResult(
             text="Hello, this is a test transcription.",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import numpy as np
 import pytest
@@ -13,7 +13,6 @@ from voice_agent.models import (
     AgentState,
     AudioChunk,
     ConversationTurn,
-    LLMResponse,
     TranscriptionResult,
     VoiceAgentConfig,
 )
@@ -170,8 +169,8 @@ class TestVoiceAgentAudioProcessing:
         assert metrics.total_turns >= 0  # May or may not increment based on mock
 
     @pytest.mark.asyncio
-    async def test_processing_sets_error_state_on_exception(self):
-        """Test that exceptions during processing set error state."""
+    async def test_processing_sets_error_state_on_exception(self, caplog, capsys):
+        """Test that exceptions during processing log and set error state."""
         agent = VoiceAgent()
         states = []
         agent.on_state_change(lambda s: states.append(s))
@@ -182,10 +181,24 @@ class TestVoiceAgentAudioProcessing:
         samples = np.zeros(16000, dtype=np.int16)
         agent._audio_buffer = [AudioChunk(data=samples.tobytes())]
 
-        await agent._process_speech()
+        with caplog.at_level("ERROR", logger="voice_agent.agent"):
+            await agent._process_speech()
 
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "Speech processing error" in caplog.text
         assert AgentState.ERROR in states
         assert agent.metrics.error_count == 1
+
+    @pytest.mark.asyncio
+    async def test_transcribe_is_demo_placeholder(self):
+        """Test placeholder STT remains deterministic for demos and tests."""
+        agent = VoiceAgent()
+
+        transcription = await agent._transcribe(b"\x00" * 32000)
+
+        assert transcription.text == "Hello, this is a test transcription."
+        assert transcription.confidence == 0.95
 
 
 class TestVoiceAgentSay:
