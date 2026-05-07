@@ -6,9 +6,12 @@ in audio streams with low latency.
 
 from __future__ import annotations
 
-import io
+import logging
 import os
-from typing import Iterator
+from collections.abc import Iterator
+from contextlib import suppress
+from importlib import import_module
+from typing import Any
 
 import numpy as np
 from dotenv import load_dotenv
@@ -16,6 +19,8 @@ from dotenv import load_dotenv
 from voice_agent.models import AudioChunk, VADConfig
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class VoiceActivityDetector:
@@ -37,14 +42,14 @@ class VoiceActivityDetector:
             min_silence_duration=float(os.getenv("VAD_MIN_SILENCE_DURATION", "0.5")),
             sample_rate=int(os.getenv("SAMPLE_RATE", "16000")),
         )
-        self._model = None
-        self._utils = None
+        self._model: Any | None = None
+        self._utils: Any | None = None
 
-    def _load_model(self):
+    def _load_model(self) -> None:
         """Lazy load the Silero VAD model."""
         if self._model is None:
             try:
-                import torch
+                torch = import_module("torch")
 
                 model, utils = torch.hub.load(
                     repo_or_dir="snakers4/silero-vad",
@@ -55,8 +60,7 @@ class VoiceActivityDetector:
                 self._model = model
                 self._utils = utils
             except Exception as e:
-                print(f"Failed to load Silero VAD: {e}")
-                # Use fallback simple energy-based VAD
+                logger.warning("Falling back to energy-based VAD: %s", e)
                 self._model = "fallback"
 
     def detect_speech(self, audio: np.ndarray) -> bool:
@@ -73,8 +77,12 @@ class VoiceActivityDetector:
         if self._model == "fallback":
             return self._fallback_detect(audio)
 
+        model = self._model
+        if model is None:
+            return self._fallback_detect(audio)
+
         try:
-            import torch
+            torch = import_module("torch")
 
             # Ensure correct format
             if audio.dtype != np.float32:
@@ -88,12 +96,12 @@ class VoiceActivityDetector:
             audio_tensor = torch.from_numpy(audio)
 
             # Get speech probability
-            speech_prob = self._model(audio_tensor, self.config.sample_rate).item()
+            speech_prob = model(audio_tensor, self.config.sample_rate).item()
 
             return speech_prob >= self.config.threshold
 
         except Exception as e:
-            print(f"VAD error: {e}")
+            logger.exception("VAD error: %s", e)
             return self._fallback_detect(audio)
 
     def _fallback_detect(self, audio: np.ndarray) -> bool:
@@ -166,10 +174,8 @@ class VoiceActivityDetector:
     def reset(self) -> None:
         """Reset the VAD state."""
         if self._model is not None and self._model != "fallback":
-            try:
+            with suppress(Exception):
                 self._model.reset_states()
-            except Exception:
-                pass
 
 
 def create_vad(config: VADConfig | None = None) -> VoiceActivityDetector:
