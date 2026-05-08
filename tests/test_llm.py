@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import builtins
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -97,15 +96,12 @@ class TestGeminiLLM:
     def test_get_model_fails_when_dependency_missing(self):
         """Test real Gemini mode fails clearly when the SDK is missing."""
         llm = GeminiLLM()
-        original_import = builtins.__import__
-
-        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-            if name == "google.generativeai":
-                raise ImportError("missing google-generativeai")
-            return original_import(name, globals, locals, fromlist, level)
 
         with (
-            patch("builtins.__import__", side_effect=fake_import),
+            patch(
+                "voice_agent.llm.import_module",
+                side_effect=ImportError("missing google-generativeai"),
+            ),
             pytest.raises(GeminiDependencyError, match="google-generativeai is required"),
         ):
             llm._get_model()
