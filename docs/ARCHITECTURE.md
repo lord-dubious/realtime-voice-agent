@@ -14,12 +14,46 @@ This document is written for reviewers who want to understand how the project is
 6. Audio output
 
 ```mermaid
-flowchart LR
-    A1[Audio stream] --> A2[Voice activity detection]
-    A2[Voice activity detection] --> A3[Transcription placeholder]
-    A3[Transcription placeholder] --> A4[Gemini response or explicit mock]
-    A4[Gemini response or explicit mock] --> A5[Edge TTS]
-    A5[Edge TTS] --> A6[Audio output]
+flowchart TB
+    classDef input fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#164e63
+    classDef core fill:#eef2ff,stroke:#4f46e5,stroke-width:2px,color:#312e81
+    classDef external fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef metadata fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef review fill:#fef2f2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+
+    Audio[/Live or local audio stream/]:::input
+    Listener[/User audio output/]:::review
+
+    subgraph AudioPipeline["Audio Pipeline"]
+        LiveKit[(LiveKit optional)]:::external
+        VAD[Silero VAD or fallback detector]:::core
+        Transcript[Deterministic transcription placeholder]:::metadata
+    end
+
+    subgraph Conversation["LLM Boundary"]
+        Agent[VoiceAgent coordinator]:::core
+        LLM[GeminiLLM explicit real or mock mode]:::core
+        Gemini{{Gemini API optional}}:::external
+        Tools[Tool callbacks]:::core
+        LLMStatus[dependency configuration errors]:::metadata
+    end
+
+    subgraph SpeechOut["Speech Output"]
+        TTS[Edge TTS synthesizer]:::core
+        Edge[(Edge TTS network)]:::external
+        AudioOut[Generated speech bytes]:::review
+    end
+
+    Audio <-->|optional stream transport| LiveKit
+    Audio --> VAD --> Transcript --> Agent
+    Agent --> LLM
+    LLM <-->|real mode only| Gemini
+    LLM -. missing dependency or key .-> LLMStatus
+    LLM --> Tools
+    LLM --> TTS
+    TTS <-->|voice synthesis| Edge
+    TTS -. graceful empty output on failure .-> LLMStatus
+    TTS --> AudioOut --> Listener
 ```
 
 ## Main Components
