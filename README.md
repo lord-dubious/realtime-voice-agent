@@ -2,6 +2,11 @@
 
 A developer-focused real-time voice agent demo built with LiveKit, Silero VAD, Edge TTS, and Google Gemini for conversational AI experiments.
 
+## Portfolio Review
+
+- [Architecture](docs/ARCHITECTURE.md) - component boundaries, data flow, external dependencies, and degraded-mode behavior.
+- [Demo Guide](docs/DEMO.md) - safe local walkthrough commands and recruiter-facing talking points.
+
 This project is useful as a starting point, but it is not a drop-in production assistant. Transcription currently uses a deterministic demo placeholder, Gemini requires the `google-generativeai` package and `GEMINI_API_KEY`, and mock LLM responses must be selected explicitly for tests or demos.
 
 ## Features
