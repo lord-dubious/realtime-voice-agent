@@ -8,13 +8,14 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from voice_agent.agent import VoiceAgent, create_agent
+from voice_agent.agent import create_agent
 from voice_agent.models import AgentState, VoiceAgentConfig
 
 app = typer.Typer(
@@ -235,12 +236,10 @@ def speak(
         "-v",
         help="TTS voice to use",
     ),
-    output: Path = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Output audio file (MP3)",
-    ),
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Output audio file (MP3)"),
+    ] = None,
 ) -> None:
     """Synthesize speech from text."""
     from voice_agent.models import TTSConfig

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 
-class AgentState(str, Enum):
+class AgentState(StrEnum):
     """Voice agent states."""
 
     IDLE = "idle"

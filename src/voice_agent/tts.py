@@ -6,16 +6,19 @@ TTS service for high-quality voice synthesis.
 
 from __future__ import annotations
 
-import asyncio
 import io
+import logging
 import os
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from dotenv import load_dotenv
 
 from voice_agent.models import TTSConfig
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class TextToSpeech:
@@ -58,13 +61,14 @@ class TextToSpeech:
             audio_data = io.BytesIO()
 
             async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    audio_data.write(chunk["data"])
+                data = chunk.get("data")
+                if chunk["type"] == "audio" and isinstance(data, bytes):
+                    audio_data.write(data)
 
             return audio_data.getvalue()
 
         except Exception as e:
-            print(f"TTS synthesis error: {e}")
+            logger.exception("TTS synthesis error: %s", e)
             return b""
 
     async def synthesize_stream(self, text: str) -> AsyncIterator[bytes]:
@@ -88,14 +92,15 @@ class TextToSpeech:
             )
 
             async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    yield chunk["data"]
+                data = chunk.get("data")
+                if chunk["type"] == "audio" and isinstance(data, bytes):
+                    yield data
 
         except Exception as e:
-            print(f"TTS streaming error: {e}")
+            logger.exception("TTS streaming error: %s", e)
 
     @staticmethod
-    async def list_voices(language: str = "en") -> list[dict]:
+    async def list_voices(language: str = "en") -> list[dict[str, Any]]:
         """List available voices for a language.
 
         Args:
@@ -108,10 +113,10 @@ class TextToSpeech:
             import edge_tts
 
             voices = await edge_tts.list_voices()
-            return [v for v in voices if v["Locale"].startswith(language)]
+            return [dict(v) for v in voices if v["Locale"].startswith(language)]
 
         except Exception as e:
-            print(f"Failed to list voices: {e}")
+            logger.exception("Failed to list voices: %s", e)
             return []
 
 

@@ -1,14 +1,16 @@
 # Real-Time Voice Agent
 
-A production-ready real-time voice agent built with LiveKit, Silero VAD, Edge TTS, and Google Gemini for natural conversational AI interactions.
+A developer-focused real-time voice agent demo built with LiveKit, Silero VAD, Edge TTS, and Google Gemini for conversational AI experiments.
+
+This project is useful as a starting point, but it is not a drop-in production assistant. Transcription currently uses a deterministic demo placeholder, Gemini requires the `google-generativeai` package and `GEMINI_API_KEY`, and mock LLM responses must be selected explicitly for tests or demos.
 
 ## Features
 
 - **Real-time Voice Activity Detection**: Silero VAD for accurate speech detection with energy-based fallback
 - **Low-latency Speech Synthesis**: Edge TTS for natural-sounding voice output
-- **Conversational AI**: Google Gemini for intelligent, context-aware responses
+- **Conversational AI**: Google Gemini integration with explicit dependency/config failures
 - **Tool Calling**: Register custom functions for the LLM to invoke
-- **WebRTC Ready**: LiveKit integration for scalable real-time communication
+- **WebRTC Ready**: LiveKit integration scaffolding for real-time communication
 - **Async Architecture**: Built with asyncio for high-performance concurrent processing
 - **Interruption Handling**: Configurable user interruption support
 
@@ -87,7 +89,11 @@ voice-agent speak "Hello, world!"
 
 ```python
 import asyncio
+import logging
+
 from voice_agent import VoiceAgent, VoiceAgentConfig
+
+logger = logging.getLogger(__name__)
 
 async def main():
     # Create agent with custom config
@@ -98,8 +104,8 @@ async def main():
     agent = VoiceAgent(config)
     
     # Register callbacks
-    agent.on_transcription(lambda text: print(f"User: {text}"))
-    agent.on_response(lambda text: print(f"Agent: {text}"))
+    agent.on_transcription(lambda text: logger.info("User: %s", text))
+    agent.on_response(lambda text: logger.info("Agent: %s", text))
     
     # Register custom tools
     def get_weather(city: str) -> str:
@@ -111,6 +117,15 @@ async def main():
     await agent.say("Hello! How can I help you today?")
 
 asyncio.run(main())
+```
+
+For tests, demos, or offline examples that should not call Gemini, opt into deterministic mock responses explicitly:
+
+```python
+from voice_agent.llm import GeminiLLM
+
+llm = GeminiLLM.create_mock()
+response = await llm.generate("hello")
 ```
 
 ### Configuration
@@ -223,7 +238,7 @@ has_speech = vad.detect_speech(audio_array)
 
 ### Text-to-Speech (TTS)
 
-Edge TTS integration for high-quality, low-latency speech synthesis:
+Edge TTS integration for speech synthesis. Runtime synthesis errors are logged and return empty audio so callers can handle graceful fallback:
 
 ```python
 from voice_agent.tts import TextToSpeech, TTSConfig
@@ -234,12 +249,12 @@ audio = await tts.synthesize("Hello, world!")
 
 ### LLM Integration
 
-Google Gemini with tool calling support:
+Google Gemini with simple tool-call parsing support. `GeminiLLM()` loads the real Gemini SDK and fails fast if `google-generativeai` or `GEMINI_API_KEY` is missing; use `GeminiLLM.create_mock()` for explicit local mock responses:
 
 ```python
 from voice_agent.llm import GeminiLLM
 
-llm = GeminiLLM(api_key="your-key", model_name="gemini-2.5-flash")
+llm = GeminiLLM()
 response = await llm.generate("Hello!", conversation_history)
 ```
 

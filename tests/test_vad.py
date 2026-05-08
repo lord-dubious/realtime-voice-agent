@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 import numpy as np
 
 from voice_agent.models import AudioChunk, VADConfig
@@ -36,7 +35,7 @@ class TestVoiceActivityDetector:
         audio = np.zeros(16000, dtype=np.float32)
         result = vad.detect_speech(audio)
 
-        assert bool(result) == False
+        assert not bool(result)
 
     def test_fallback_detect_speech(self):
         """Test fallback detection with loud audio."""
@@ -47,7 +46,7 @@ class TestVoiceActivityDetector:
         audio = np.ones(16000, dtype=np.float32) * 0.5
         result = vad.detect_speech(audio)
 
-        assert bool(result) == True
+        assert bool(result)
 
     def test_detect_speech_with_low_energy(self):
         """Test detection with low energy audio."""
@@ -58,7 +57,7 @@ class TestVoiceActivityDetector:
         audio = np.ones(16000, dtype=np.float32) * 0.01
         result = vad.detect_speech(audio)
 
-        assert bool(result) == False
+        assert not bool(result)
 
     def test_detect_speech_normalizes_int16(self):
         """Test that detection handles int16 values correctly."""
@@ -190,8 +189,8 @@ class TestVADEdgeCases:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             result = vad.detect_speech(audio)
-            # Empty audio should return something
-            assert result is not None or result == False or result == True
+            # Empty audio should return a bool-like result.
+            assert isinstance(bool(result), bool)
 
     def test_very_short_audio(self):
         """Test with very short audio."""
@@ -225,4 +224,4 @@ class TestVADEdgeCases:
         audio = np.ones(16000, dtype=np.float32) * 0.05
         result = vad.detect_speech(audio)
 
-        assert bool(result) == True
+        assert bool(result)

@@ -1,20 +1,41 @@
-"""LLM integration using Google Gemini.
-
-This module provides the AI brain for the voice agent using
-Gemini for fast, intelligent responses.
-"""
+"""LLM integration using Google Gemini."""
 
 from __future__ import annotations
 
+import logging
 import os
-from typing import Any
+from collections.abc import Callable
+from importlib import import_module
+from typing import Any, TypedDict
 
 from dotenv import load_dotenv
-from pydantic import BaseModel
 
 from voice_agent.models import ConversationTurn, LLMResponse, ToolCall, VoiceAgentConfig
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+
+class GeminiLLMError(RuntimeError):
+    """Base exception for Gemini LLM integration failures."""
+
+
+class GeminiDependencyError(GeminiLLMError):
+    """Raised when the Gemini SDK dependency is unavailable."""
+
+
+class GeminiConfigurationError(GeminiLLMError):
+    """Raised when required Gemini configuration is missing."""
+
+
+class GeminiGenerationError(GeminiLLMError):
+    """Raised internally when Gemini response generation fails."""
+
+
+class _ToolEntry(TypedDict):
+    func: Callable[..., Any]
+    description: str
 
 
 class GeminiLLM:
@@ -24,36 +45,51 @@ class GeminiLLM:
     real-time voice interactions.
     """
 
-    def __init__(self, config: VoiceAgentConfig | None = None):
+    def __init__(self, config: VoiceAgentConfig | None = None, *, mock: bool = False):
         """Initialize the LLM.
 
         Args:
             config: Voice agent configuration.
+            mock: Return deterministic local responses without loading Gemini.
         """
         self.config = config or VoiceAgentConfig()
-        self._model = None
-        self._tools: dict[str, callable] = {}
+        self._model: Any | None = None
+        self._mock_mode = mock
+        self._tools: dict[str, _ToolEntry] = {}
 
-    def _get_model(self):
+    @classmethod
+    def create_mock(cls, config: VoiceAgentConfig | None = None) -> GeminiLLM:
+        """Create an explicitly mocked LLM for tests and demos."""
+        return cls(config=config, mock=True)
+
+    def _get_model(self) -> Any:
         """Lazy load the Gemini model."""
+        if self._mock_mode:
+            return None
+
         if self._model is None:
             try:
-                import google.generativeai as genai
+                genai = import_module("google.generativeai")
+            except ImportError as exc:
+                raise GeminiDependencyError(
+                    "google-generativeai is required for GeminiLLM. "
+                    "Install the project dependencies or use GeminiLLM.create_mock() "
+                    "for tests and demos."
+                ) from exc
 
-                api_key = os.getenv("GEMINI_API_KEY")
-                if not api_key:
-                    raise ValueError("GEMINI_API_KEY not set")
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                raise GeminiConfigurationError(
+                    "GEMINI_API_KEY is required for GeminiLLM. "
+                    "Set it in the environment or use GeminiLLM.create_mock() for mock responses."
+                )
 
-                genai.configure(api_key=api_key)
-                self._model = genai.GenerativeModel(self.config.model_name)
-
-            except ImportError:
-                print("google-generativeai not installed, using mock")
-                self._model = "mock"
+            genai.configure(api_key=api_key)
+            self._model = genai.GenerativeModel(self.config.model_name)
 
         return self._model
 
-    def register_tool(self, name: str, func: callable, description: str = "") -> None:
+    def register_tool(self, name: str, func: Callable[..., Any], description: str = "") -> None:
         """Register a tool for the LLM to use.
 
         Args:
@@ -77,14 +113,12 @@ class GeminiLLM:
         Returns:
             LLM response with text and optional tool calls.
         """
-        model = self._get_model()
-
-        if model == "mock":
+        if self._mock_mode:
             return self._mock_response(user_input)
 
-        try:
-            import google.generativeai as genai
+        model = self._get_model()
 
+        try:
             # Build conversation context
             messages = self._build_messages(user_input, conversation_history or [])
 
@@ -103,13 +137,10 @@ class GeminiLLM:
                 else None,
             )
 
-        except Exception as e:
-            print(f"LLM generation error: {e}")
-            return LLMResponse(
-                text="I'm sorry, I encountered an error. Could you please repeat that?",
-                tool_calls=[],
-                finish_reason="error",
-            )
+        except Exception as exc:
+            error = GeminiGenerationError("Gemini generation failed")
+            logger.exception("LLM generation error: %s", exc)
+            return self._generation_error_response(error)
 
     async def generate_stream(
         self,
@@ -125,12 +156,12 @@ class GeminiLLM:
         Yields:
             Text chunks.
         """
-        model = self._get_model()
-
-        if model == "mock":
+        if self._mock_mode:
             for word in self._mock_response(user_input).text.split():
                 yield word + " "
             return
+
+        model = self._get_model()
 
         try:
             messages = self._build_messages(user_input, conversation_history or [])
@@ -140,9 +171,18 @@ class GeminiLLM:
                 if chunk.text:
                     yield chunk.text
 
-        except Exception as e:
-            print(f"LLM streaming error: {e}")
+        except Exception as exc:
+            logger.exception("LLM streaming error: %s", exc)
             yield "I'm sorry, I encountered an error."
+
+    def _generation_error_response(self, error: GeminiGenerationError) -> LLMResponse:
+        """Build a safe response for generation failures."""
+        logger.debug("Returning explicit LLM error response: %s", error)
+        return LLMResponse(
+            text="I'm sorry, I encountered an error. Could you please repeat that?",
+            tool_calls=[],
+            finish_reason="error",
+        )
 
     def _build_messages(
         self,
@@ -254,13 +294,14 @@ class GeminiLLM:
         )
 
 
-def create_llm(config: VoiceAgentConfig | None = None) -> GeminiLLM:
+def create_llm(config: VoiceAgentConfig | None = None, *, mock: bool = False) -> GeminiLLM:
     """Create a GeminiLLM instance.
 
     Args:
         config: Optional voice agent configuration.
+        mock: Return an explicitly mocked LLM for tests and demos.
 
     Returns:
         GeminiLLM instance.
     """
-    return GeminiLLM(config)
+    return GeminiLLM(config, mock=mock)

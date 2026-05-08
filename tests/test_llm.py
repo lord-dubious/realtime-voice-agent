@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from voice_agent.llm import GeminiLLM, create_llm
+from voice_agent.llm import GeminiConfigurationError, GeminiDependencyError, GeminiLLM, create_llm
 from voice_agent.models import ConversationTurn, LLMResponse, ToolCall, VoiceAgentConfig
 
 
@@ -41,8 +41,7 @@ class TestGeminiLLM:
     @pytest.mark.asyncio
     async def test_generate_mock_response(self):
         """Test generating with mock model."""
-        llm = GeminiLLM()
-        llm._model = "mock"  # Force mock mode
+        llm = GeminiLLM.create_mock()
 
         response = await llm.generate("hello")
 
@@ -53,8 +52,7 @@ class TestGeminiLLM:
     @pytest.mark.asyncio
     async def test_generate_with_history(self):
         """Test generating with conversation history."""
-        llm = GeminiLLM()
-        llm._model = "mock"
+        llm = GeminiLLM.create_mock()
 
         history = [
             ConversationTurn(role="user", content="Hi"),
@@ -78,25 +76,48 @@ class TestGeminiLLM:
             assert isinstance(response, LLMResponse)
 
     @pytest.mark.asyncio
-    async def test_generate_handles_error(self):
-        """Test error handling in generate."""
+    async def test_generate_handles_error_with_logging(self, caplog, capsys):
+        """Test error handling in generate logs instead of printing."""
         llm = GeminiLLM()
 
         mock_model = MagicMock()
         mock_model.generate_content.side_effect = Exception("API error")
         llm._model = mock_model
 
-        with patch("google.generativeai.configure"):
+        with caplog.at_level("ERROR", logger="voice_agent.llm"):
             response = await llm.generate("Test")
 
-            assert "error" in response.text.lower() or "sorry" in response.text.lower()
-            assert response.finish_reason == "error"
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "LLM generation error" in caplog.text
+        assert "error" in response.text.lower() or "sorry" in response.text.lower()
+        assert response.finish_reason == "error"
+
+    def test_get_model_fails_when_dependency_missing(self):
+        """Test real Gemini mode fails clearly when the SDK is missing."""
+        llm = GeminiLLM()
+
+        with (
+            patch(
+                "voice_agent.llm.import_module",
+                side_effect=ImportError("missing google-generativeai"),
+            ),
+            pytest.raises(GeminiDependencyError, match="google-generativeai is required"),
+        ):
+            llm._get_model()
+
+    def test_get_model_fails_when_api_key_missing(self, monkeypatch):
+        """Test real Gemini mode fails clearly when GEMINI_API_KEY is missing."""
+        llm = GeminiLLM()
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+        with pytest.raises(GeminiConfigurationError, match="GEMINI_API_KEY is required"):
+            llm._get_model()
 
     @pytest.mark.asyncio
     async def test_generate_stream(self):
         """Test streaming generation."""
-        llm = GeminiLLM()
-        llm._model = "mock"
+        llm = GeminiLLM.create_mock()
 
         chunks = []
         async for chunk in llm.generate_stream("hello"):
@@ -219,6 +240,12 @@ class TestCreateLLM:
         llm = create_llm(sample_agent_config)
         assert llm.config == sample_agent_config
 
+    def test_create_llm_mock(self):
+        """Test creating an explicitly mocked LLM through the factory."""
+        llm = create_llm(mock=True)
+        assert isinstance(llm, GeminiLLM)
+        assert llm._mock_mode is True
+
 
 class TestMockResponses:
     """Tests for mock response generation."""
@@ -226,8 +253,7 @@ class TestMockResponses:
     @pytest.mark.asyncio
     async def test_mock_greeting(self):
         """Test mock response to greeting."""
-        llm = GeminiLLM()
-        llm._model = "mock"
+        llm = GeminiLLM.create_mock()
 
         response = await llm.generate("hello")
         assert "hello" in response.text.lower() or "help" in response.text.lower()
@@ -235,8 +261,7 @@ class TestMockResponses:
     @pytest.mark.asyncio
     async def test_mock_goodbye(self):
         """Test mock response to goodbye."""
-        llm = GeminiLLM()
-        llm._model = "mock"
+        llm = GeminiLLM.create_mock()
 
         response = await llm.generate("goodbye")
         assert "goodbye" in response.text.lower() or "great day" in response.text.lower()
@@ -244,8 +269,7 @@ class TestMockResponses:
     @pytest.mark.asyncio
     async def test_mock_unknown(self):
         """Test mock response to unknown input."""
-        llm = GeminiLLM()
-        llm._model = "mock"
+        llm = GeminiLLM.create_mock()
 
         response = await llm.generate("xyzzy12345")
         assert len(response.text) > 0
