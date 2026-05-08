@@ -1,4 +1,4 @@
-"""Real-Time Voice Agent - WebRTC voice interaction demo with Gemini AI.
+"""Developer-focused voice interaction demo with explicit Gemini dependency boundaries.
 
 A developer-focused voice agent using:
 - LiveKit for WebRTC transport

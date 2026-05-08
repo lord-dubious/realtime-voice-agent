@@ -20,7 +20,7 @@ from voice_agent.models import AgentState, VoiceAgentConfig
 
 app = typer.Typer(
     name="voice-agent",
-    help="Real-time voice agent with WebRTC/LiveKit, Silero VAD, and Gemini AI",
+    help="Real-time voice assistant demo with LiveKit, Silero VAD, Edge TTS, Gemini, and explicit mock boundaries",
     no_args_is_help=True,
 )
 console = Console()
