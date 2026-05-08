@@ -2,12 +2,58 @@
 
 A developer-focused real-time voice agent demo built with LiveKit, Silero VAD, Edge TTS, and Google Gemini for conversational AI experiments.
 
-## Portfolio Review
+## Portfolio Showcase
 
-- [Architecture](docs/ARCHITECTURE.md) - component boundaries, data flow, external dependencies, and degraded-mode behavior.
-- [Demo Guide](docs/DEMO.md) - safe local walkthrough commands and recruiter-facing talking points.
+![Realtime Voice Agent CLI showcase](docs/assets/showcase.png)
 
-This project is useful as a starting point, but it is not a drop-in production assistant. Transcription currently uses a deterministic demo placeholder, Gemini requires the `google-generativeai` package and `GEMINI_API_KEY`, and mock LLM responses must be selected explicitly for tests or demos.
+- **Architecture deep dive:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- **Demo guide:** [`docs/DEMO.md`](docs/DEMO.md)
+- **Reviewer focus:** LiveKit audio flow, VAD, explicit Gemini mock/real behavior, Edge TTS, and dependency failure handling.
+
+## Architecture Overview
+
+```mermaid
+flowchart TB
+    classDef input fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#164e63
+    classDef core fill:#eef2ff,stroke:#4f46e5,stroke-width:2px,color:#312e81
+    classDef external fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef metadata fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef review fill:#fef2f2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+
+    Audio[/Live or local audio stream/]:::input
+    Listener[/User audio output/]:::review
+
+    subgraph AudioPipeline["Audio Pipeline"]
+        LiveKit[(LiveKit optional)]:::external
+        VAD[Silero VAD or fallback detector]:::core
+        Transcript[Deterministic transcription placeholder]:::metadata
+    end
+
+    subgraph Conversation["LLM Boundary"]
+        Agent[VoiceAgent coordinator]:::core
+        LLM[GeminiLLM explicit real or mock mode]:::core
+        Gemini{{Gemini API optional}}:::external
+        Tools[Tool callbacks]:::core
+        LLMStatus[dependency configuration errors]:::metadata
+    end
+
+    subgraph SpeechOut["Speech Output"]
+        TTS[Edge TTS synthesizer]:::core
+        Edge[(Edge TTS network)]:::external
+        AudioOut[Generated speech bytes]:::review
+    end
+
+    Audio <-->|optional stream transport| LiveKit
+    Audio --> VAD --> Transcript --> Agent
+    Agent --> LLM
+    LLM <-->|real mode only| Gemini
+    LLM -. missing dependency or key .-> LLMStatus
+    LLM --> Tools
+    LLM --> TTS
+    TTS <-->|voice synthesis| Edge
+    TTS -. graceful empty output on failure .-> LLMStatus
+    TTS --> AudioOut --> Listener
+```
 
 ## Features
 
@@ -18,18 +64,6 @@ This project is useful as a starting point, but it is not a drop-in production a
 - **WebRTC Ready**: LiveKit integration scaffolding for real-time communication
 - **Async Architecture**: Built with asyncio for high-performance concurrent processing
 - **Interruption Handling**: Configurable user interruption support
-
-## Architecture
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Audio In  │────▶│     VAD     │────▶│     LLM     │────▶│     TTS     │
-│  (WebRTC)   │     │  (Silero)   │     │  (Gemini)   │     │ (Edge TTS)  │
-└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
-                           │                   │                   │
-                           ▼                   ▼                   ▼
-                    Speech Detection    Response Gen.       Audio Output
-```
 
 ## Installation
 
